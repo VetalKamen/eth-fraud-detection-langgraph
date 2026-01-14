@@ -1,0 +1,48 @@
+[project]
+name = "eth-fraud-detection-langgraph"
+version = "0.1.0"
+description = "Ethereum fraud detection with PyTorch, explainability, and LangGraph orchestration."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "typer>=0.12",
+  "rich>=13.7",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyarrow>=15.0",
+  "scikit-learn>=1.4",
+  "torch>=2.2",
+  "captum>=0.7",
+  "langgraph>=0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "types-requests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
