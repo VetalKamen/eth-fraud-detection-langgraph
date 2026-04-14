@@ -1,0 +1,124 @@
+{
+  "tasks": [
+    {
+      "id": "task-01-config-and-pipeline-contracts",
+      "title": "Add typed configuration, artifact paths, and shared pipeline state contracts",
+      "status": "completed",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Add a typed configuration module under `src/app/` using Pydantic settings for dataset inputs, artifact outputs, and runtime options.",
+        "Define shared pipeline state types used by the future orchestration layer so downstream nodes agree on inputs and outputs.",
+        "Document or expose a single package-level bootstrap location for future CLI or graph execution without implementing model logic yet.",
+        "Add focused unit tests for default settings, environment overrides, and pipeline state validation."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/unit/test_config.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-02-dataset-ingestion",
+      "title": "Implement deterministic dataset loading, schema validation, and split handling",
+      "status": "completed",
+      "dependencies": [
+        "task-01-config-and-pipeline-contracts"
+      ],
+      "acceptance_criteria": [
+        "Add dataset models and loaders that validate expected fraud labels and feature columns before training starts.",
+        "Implement deterministic train, validation, and test split handling driven by configuration.",
+        "Reject malformed or incomplete input early with actionable errors instead of silently coercing data.",
+        "Cover loader behavior with fixture-based tests for valid input, missing columns, and split reproducibility."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/unit/test_dataset.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-03-feature-pipeline",
+      "title": "Build leakage-safe feature preprocessing and artifact persistence",
+      "status": "completed",
+      "dependencies": [
+        "task-02-dataset-ingestion"
+      ],
+      "acceptance_criteria": [
+        "Implement feature preprocessing that cleanly separates fit-time and transform-time behavior.",
+        "Persist fitted preprocessing artifacts so inference and explainability use the same feature representation as training.",
+        "Make feature ordering explicit and stable to prevent attribution or model drift from column reordering.",
+        "Add tests that prove preprocessing outputs are deterministic and that inference never refits training statistics."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/unit/test_features.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-04-baseline-model-training",
+      "title": "Implement a baseline binary fraud classifier and training loop",
+      "status": "completed",
+      "dependencies": [
+        "task-03-feature-pipeline"
+      ],
+      "acceptance_criteria": [
+        "Add a baseline PyTorch classifier that consumes the persisted feature representation.",
+        "Implement a training loop with deterministic seeding, checkpoint output, and binary classification metrics.",
+        "Separate training configuration from dataset and artifact configuration to avoid hidden runtime coupling.",
+        "Add tests for tensor shape handling, checkpoint generation, and metric calculation on small fixtures."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/unit/test_training.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-05-explainability",
+      "title": "Integrate Captum-based explanations aligned to the trained feature space",
+      "status": "completed",
+      "dependencies": [
+        "task-04-baseline-model-training"
+      ],
+      "acceptance_criteria": [
+        "Add explanation generation that runs against the trained model and the exact persisted preprocessing artifacts.",
+        "Emit explanation outputs that map back to stable feature names rather than raw tensor indexes.",
+        "Fail fast if model, preprocessing, or feature metadata are out of sync to avoid misleading attributions.",
+        "Add tests that verify attribution outputs are shaped correctly and remain aligned with feature names."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/unit/test_explainability.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-06-langgraph-orchestration",
+      "title": "Orchestrate data loading, training, and explanation steps through LangGraph",
+      "status": "completed",
+      "dependencies": [
+        "task-01-config-and-pipeline-contracts",
+        "task-04-baseline-model-training",
+        "task-05-explainability"
+      ],
+      "acceptance_criteria": [
+        "Add a LangGraph workflow that wires dataset loading, preprocessing, training, and explanation steps through explicit state transitions.",
+        "Keep graph nodes idempotent around artifact writes so reruns do not double-write or partially overwrite outputs.",
+        "Expose a single invocation path for the workflow from the application package boundary.",
+        "Add integration tests that exercise the end-to-end graph on a small fixture dataset."
+      ],
+      "verification_command": "local_test/.venv/bin/python -m pytest tests/integration/test_graph_pipeline.py -q && local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests"
+    },
+    {
+      "id": "task-07-quality-gates-and-bootstrap",
+      "title": "Harden developer bootstrap, static checks, and end-to-end verification",
+      "status": "completed",
+      "dependencies": [
+        "task-06-langgraph-orchestration"
+      ],
+      "acceptance_criteria": [
+        "Ensure the repo bootstrap path installs all declared dev tools needed by the existing Make and CI command set.",
+        "Expand tests beyond smoke coverage so CI validates config, data loading, preprocessing, training, explanations, and orchestration.",
+        "Keep lint, typecheck, and test commands aligned between local development and CI.",
+        "Document any remaining environment assumptions that block reproducible setup."
+      ],
+      "verification_command": "make check"
+    },
+    {
+      "id": "task-08-atomic-artifact-publication",
+      "title": "Eliminate the remaining publication gap by embedding parquet provenance",
+      "status": "completed",
+      "dependencies": [
+        "task-07-quality-gates-and-bootstrap"
+      ],
+      "acceptance_criteria": [
+        "Make prepared-dataset and explanation publications single-file atomic artifacts by embedding their provenance manifests into parquet metadata instead of writing sidecar JSON files.",
+        "Keep orchestration reuse validation provenance-aware by reading embedded parquet metadata plus file fingerprints.",
+        "Retain the shared atomic temp-file-and-replace path for JSON/text and checkpoint outputs.",
+        "Add tests that prove dataset and explanation validation no longer depend on sidecar manifest files."
+      ],
+      "verification_command": "make check"
+    }
+  ]
+}

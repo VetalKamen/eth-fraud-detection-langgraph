@@ -1,0 +1,68 @@
+2026-04-14
+- Learned: this repo is a minimal Python scaffold for an Ethereum fraud detection project. The intended stack is declared in `pyproject.toml` as Pydantic, PyTorch, Captum, and LangGraph, but `src/app/` and `src/graph/` are still empty and the only existing test is `tests/unit/test_smoke.py`.
+- Commands corrected: created `AGENTS.md` with the verified command set from `Makefile` and `.github/workflows/ci.yml`. The repo defines install, format, lint, typecheck, and test commands; there is no build command and no Docker usage in this worktree. Locally, `make test` passes, while `make lint` and `make type` are blocked until dev dependencies are installed.
+- Main goals defined: add typed config and graph state contracts, implement deterministic dataset ingestion, build a leakage-safe feature pipeline, train a baseline fraud model, add Captum explanations, and orchestrate the workflow through LangGraph with stronger quality gates.
+- Next ready task: `task-01-config-and-pipeline-contracts` to establish typed settings, artifact paths, and shared pipeline state before data, training, or orchestration logic is added.
+
+2026-04-14
+- Completed: `task-01-config-and-pipeline-contracts`.
+- Added: typed settings in `src/app/config.py`, a single runtime bootstrap API in `src/app/bootstrap.py`, validated shared pipeline state in `src/graph/state.py`, and tests covering defaults, environment overrides, and stage contract validation.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-02-dataset-ingestion` to implement deterministic dataset loading and schema validation on top of the new runtime contracts.
+
+2026-04-14
+- Completed: `task-02-dataset-ingestion`.
+- Added: `src/app/dataset.py` with parquet-only dataset loading, explicit schema validation, binary-label checks, deterministic entity-level split assignment, and prepared dataset persistence guarded against silent overwrite. Added `tests/unit/test_dataset.py` for valid ingestion, missing feature columns, reproducible splits under row reordering, and invalid label rejection.
+- Updated: `DatasetSettings` now supports explicit `feature_columns` and `split_column`, and `pyproject.toml` now includes `pandas-stubs` so strict mypy can type-check the pandas-based ingestion code.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-03-feature-pipeline` to build a fit/transform-safe preprocessing layer on top of the prepared split dataset without introducing training-stat leakage.
+
+2026-04-14
+- Review fixes: tightened dataset schema resolution so ingestion now requires an explicit feature allowlist instead of inferring every non-reserved column, and carried `split_column` through `PipelineState` so downstream stages can honor non-default split names.
+
+2026-04-14
+- Completed: `task-03-feature-pipeline`.
+- Added: `src/app/features.py` with train-split-only preprocessor fitting, transform-only inference helpers, stable feature-order handling, matrix building from persisted feature order, and JSON preprocessor persistence guarded against silent overwrite.
+- Verified: the persisted preprocessor is reload-safe, transformation uses training statistics instead of full-dataset statistics, and feature matrix generation is stable even when dataframe column order changes.
+- Review fixes: rejected empty `feature_columns` before feature preparation so a `dataset_loaded` state cannot silently build a zero-column preprocessor.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-04-baseline-model-training` to build a deterministic baseline fraud classifier, emit a checkpoint, and record training metrics against the prepared feature pipeline.
+
+2026-04-14
+- Completed: `task-04-baseline-model-training`.
+- Added: `TrainingSettings` to keep optimization controls separate from dataset, artifact, and runtime config; `src/app/training.py` with a deterministic baseline `torch.nn.Linear` classifier, validation metrics, and a self-describing checkpoint containing model shape, feature ordering, label/split columns, preprocessor path, training hyperparameters, metrics, and model weights.
+- Verified: checkpoint generation, metric computation, deterministic weights and metrics under the same seed, invariance to raw row reordering, stale preprocessor rejection, and restoration of torch's global deterministic flag after training.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-05-explainability` to add Captum-based attributions that are guaranteed to align with the persisted preprocessor feature ordering and the trained checkpoint metadata.
+
+2026-04-14
+- Completed: `task-05-explainability`.
+- Added: `src/app/explainability.py` with Captum Integrated Gradients on model logits, strict checkpoint/preprocessor/state alignment checks, artifact fingerprint validation, persisted attribution parquet output, and a sidecar manifest capturing feature order and artifact provenance.
+- Review fixes: explanation generation now checks both output targets before writing, and pipeline state carries preprocessor/checkpoint fingerprints so explainability can reject stale or replaced artifacts even when schema metadata still matches.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-06-langgraph-orchestration` to wire dataset ingestion, feature preparation, training, and explainability into a single idempotent LangGraph execution path.
+
+2026-04-14
+- Completed: `task-06-langgraph-orchestration`.
+- Added: `src/graph/workflow.py` with a linear LangGraph pipeline that composes dataset ingestion, feature preparation, training, and explainability, plus validated recovery paths that reuse existing artifacts only when their metadata and fingerprints still match the current pipeline state.
+- Review fixes: dataset orchestration now persists and validates prepared-dataset provenance against the current raw input, and explanation reuse now validates the explanation parquet itself via a stored fingerprint instead of trusting the sidecar manifest alone.
+- Verified: the graph reaches `explained`, reruns without rewriting artifacts on identical input, and rejects reuse when the raw parquet changes under the same `run_id`.
+- Verification: `local_test/.venv/bin/python -m pytest -q`, `local_test/.venv/bin/python -m mypy --python-executable local_test/.venv/bin/python src tests`, and `local_test/.venv/bin/python -m ruff check src tests` all pass.
+- Next ready task: `task-07-quality-gates-and-bootstrap` to harden local bootstrap and CI so the full implemented pipeline and graph orchestration are covered by the repo’s declared command model.
+
+2026-04-14
+- Completed: `task-07-quality-gates-and-bootstrap`.
+- Updated: `Makefile` now owns the canonical repo-local bootstrap and quality-gate commands through `local_test/.venv`, `.github/workflows/ci.yml` now invokes those same Make targets, and `README.md` now documents the supported local bootstrap and verification path instead of assuming global tools.
+- Verified: `make format`, `make check`, and the existing repo-local quality gates all pass against the implemented pipeline, including unit and integration coverage for orchestration reruns and stale-input rejection.
+- Status: all tasks in `tasks.json` are now complete. The main remaining engineering gap is transactional artifact persistence rather than missing pipeline functionality or missing command coverage.
+
+2026-04-14
+- Hardening follow-up: added atomic temp-file-and-replace persistence helpers in `src/app/artifacts.py` and migrated dataset parquet/manifest writes, preprocessor writes, checkpoint writes, and explanation artifact writes onto the shared atomic path.
+- Added `tests/unit/test_artifacts.py` to cover text, parquet, binary/checkpoint, cleanup-on-error, and overwrite-disabled behavior.
+- Verification: `make check` passes after the atomic-write migration. Single-file artifact corruption risk is materially reduced; the remaining persistence gap is transactional publication of multi-file artifact sets.
+
+2026-04-14
+- Completed: `task-08-atomic-artifact-publication`.
+- Updated: prepared-dataset and explanation provenance now live inside parquet metadata instead of sidecar manifest files, so those publications are fully covered by the existing atomic parquet write path.
+- Updated: orchestration recovery now reads embedded parquet provenance directly, and the integration/unit tests no longer depend on sidecar manifests for dataset or explanation validation.
+- Verification: `make check` passes after the parquet-metadata refactor. The planned repository goal set is fully implemented for the current scope.
