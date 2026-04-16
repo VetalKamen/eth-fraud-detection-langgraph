@@ -66,3 +66,8 @@
 - Updated: prepared-dataset and explanation provenance now live inside parquet metadata instead of sidecar manifest files, so those publications are fully covered by the existing atomic parquet write path.
 - Updated: orchestration recovery now reads embedded parquet provenance directly, and the integration/unit tests no longer depend on sidecar manifests for dataset or explanation validation.
 - Verification: `make check` passes after the parquet-metadata refactor. The planned repository goal set is fully implemented for the current scope.
+
+2026-04-16
+- Hardening follow-up: training and recovery now preserve Python, NumPy, and Torch RNG state so the pipeline does not leak global randomness into the host process.
+- Hardening follow-up: ingestion now fails early when the configured split ratios cannot produce a validation split, instead of letting training fail later on an undersized prepared dataset.
+- Verification: `make check` passes after the RNG and split-allocation tightening.
