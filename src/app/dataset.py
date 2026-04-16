@@ -19,6 +19,7 @@ from graph.state import PipelineState
 
 DatasetSplit = Literal["train", "validation", "test"]
 _SPLIT_ORDER: tuple[DatasetSplit, ...] = ("train", "validation", "test")
+_REQUIRED_NON_EMPTY_SPLITS: tuple[DatasetSplit, ...] = ("train", "validation")
 _ALLOWED_LABEL_VALUES = (0, 1)
 _PREPARED_DATASET_MANIFEST_KEY = "eth_fraud.prepared_dataset_manifest"
 
@@ -159,6 +160,7 @@ def assign_splits(
         "test": test_ratio * entity_count,
     }
     split_entity_counts = _allocate_entity_counts(ratio_targets, entity_count)
+    _validate_split_allocation(split_entity_counts, ratio_targets)
 
     rng = np.random.default_rng(random_seed)
     shuffled_entities = list(rng.permutation(unique_entities))
@@ -320,3 +322,20 @@ def _allocate_entity_counts(
         split_counts[split_name] += 1
 
     return split_counts
+
+
+def _validate_split_allocation(
+    split_entity_counts: dict[DatasetSplit, int],
+    ratio_targets: dict[DatasetSplit, float],
+) -> None:
+    missing_required_splits = [
+        split_name
+        for split_name in _REQUIRED_NON_EMPTY_SPLITS
+        if ratio_targets[split_name] > 0 and split_entity_counts[split_name] == 0
+    ]
+    if missing_required_splits:
+        missing_list = ", ".join(missing_required_splits)
+        raise ValueError(
+            "Dataset is too small for the configured split ratios; "
+            f"missing required splits: {missing_list}"
+        )

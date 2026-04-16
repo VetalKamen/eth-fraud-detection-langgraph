@@ -139,6 +139,18 @@ def test_ingest_dataset_rejects_non_binary_labels(tmp_path: Path) -> None:
         ingest_dataset(settings)
 
 
+def test_ingest_dataset_rejects_datasets_that_cannot_produce_validation_split(
+    tmp_path: Path,
+) -> None:
+    raw_path = tmp_path / "raw.parquet"
+    tiny = _make_dataset().iloc[:4].reset_index(drop=True)
+    tiny.to_parquet(raw_path, index=False)
+    settings = _build_settings(raw_path, tmp_path / "artifacts")
+
+    with pytest.raises(ValueError, match="missing required splits: validation"):
+        ingest_dataset(settings)
+
+
 def test_ingest_dataset_drops_unconfigured_extra_columns(tmp_path: Path) -> None:
     raw_path = tmp_path / "raw.parquet"
     frame = _make_dataset()

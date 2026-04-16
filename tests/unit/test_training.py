@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -196,11 +198,29 @@ def test_train_baseline_model_restores_deterministic_torch_flag(tmp_path: Path) 
     settings = _build_settings(raw_path, tmp_path / "artifacts", run_id="run-01")
     ingested = ingest_dataset(settings)
     prepared = prepare_features(ingested.state, settings)
+    previous_python_state = random.getstate()
+    previous_numpy_state = cast(Any, np.random.get_state())
+    previous_torch_state = torch.random.get_rng_state()
     previous = torch.are_deterministic_algorithms_enabled()
 
     try:
+        random.seed(123)
+        np.random.seed(123)
+        torch.manual_seed(123)
         torch.use_deterministic_algorithms(False)
+        seeded_python_state = random.getstate()
+        seeded_numpy_state = cast(Any, np.random.get_state())
+        seeded_torch_state = torch.random.get_rng_state()
         train_baseline_model(prepared.state, settings)
         assert torch.are_deterministic_algorithms_enabled() is False
+        assert random.getstate() == seeded_python_state
+        restored_numpy_state = cast(Any, np.random.get_state())
+        assert restored_numpy_state[0] == seeded_numpy_state[0]
+        assert np.array_equal(restored_numpy_state[1], seeded_numpy_state[1])
+        assert restored_numpy_state[2:] == seeded_numpy_state[2:]
+        assert torch.equal(torch.random.get_rng_state(), seeded_torch_state)
     finally:
+        random.setstate(previous_python_state)
+        np.random.set_state(previous_numpy_state)
+        torch.random.set_rng_state(previous_torch_state)
         torch.use_deterministic_algorithms(previous)

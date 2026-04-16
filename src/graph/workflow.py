@@ -28,6 +28,7 @@ from app.features import (
     validate_preprocessor_against_state,
 )
 from app.training import (
+    _preserve_training_rng_state,
     build_model_checkpoint,
     fit_baseline_model,
     load_model_checkpoint,
@@ -197,8 +198,7 @@ def _recover_training_state(state: PipelineState, settings: AppSettings) -> Pipe
         raise ValueError("Existing checkpoint metrics are missing or invalid")
     prepared_frame = load_prepared_dataset(cast(Path, state.prepared_dataset_path))
     preprocessor = load_preprocessor(cast(Path, state.preprocessor_path))
-    previous_deterministic_mode = torch.are_deterministic_algorithms_enabled()
-    try:
+    with _preserve_training_rng_state():
         torch.manual_seed(settings.training.seed)
         torch.use_deterministic_algorithms(True)
         expected_model, expected_metrics = fit_baseline_model(
@@ -207,8 +207,6 @@ def _recover_training_state(state: PipelineState, settings: AppSettings) -> Pipe
             state=state,
             settings=settings,
         )
-    finally:
-        torch.use_deterministic_algorithms(previous_deterministic_mode)
     expected_checkpoint = build_model_checkpoint(
         model=expected_model,
         metrics=expected_metrics,

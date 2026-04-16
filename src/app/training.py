@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -53,8 +55,7 @@ def train_baseline_model(
     if not state.feature_columns:
         raise ValueError("PipelineState must include feature_columns before training")
 
-    previous_deterministic_mode = torch.are_deterministic_algorithms_enabled()
-    try:
+    with _preserve_training_rng_state():
         _set_training_seed(settings.training.seed)
 
         frame = load_prepared_dataset(state.prepared_dataset_path)
@@ -99,8 +100,6 @@ def train_baseline_model(
             metrics=metrics,
             state=updated_state,
         )
-    finally:
-        torch.use_deterministic_algorithms(previous_deterministic_mode)
 
 
 def compute_binary_classification_metrics(
@@ -172,6 +171,24 @@ def _set_training_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True)
+
+
+@contextmanager
+def _preserve_training_rng_state() -> Iterator[None]:
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.random.get_rng_state()
+    previous_deterministic_mode = torch.are_deterministic_algorithms_enabled()
+    cuda_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        yield
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.random.set_rng_state(torch_state)
+        if cuda_states is not None:
+            torch.cuda.set_rng_state_all(cuda_states)
+        torch.use_deterministic_algorithms(previous_deterministic_mode)
 
 
 def _validate_preprocessor_matches_state(
